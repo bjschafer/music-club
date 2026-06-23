@@ -1,0 +1,40 @@
+{
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "name": "music-club",
+    "main": "src/index.ts",
+    "compatibility_date": "2026-06-01",
+    // Native Web Crypto Ed25519 needs no compat flag. nodejs_compat is here for
+    // later stages (e.g. richer crypto/util usage); harmless to keep enabled.
+    "compatibility_flags": [
+        "nodejs_compat"
+    ],
+    "observability": {
+        "enabled": true
+    },
+    "d1_databases": [
+        {
+            "binding": "DB",
+            "database_name": "music-club",
+            "database_id": "3f130ae1-2c37-4042-89be-403d5689a12f"
+        }
+    ],
+    // Background link enrichment (song.link). Create with:
+    //   bun run queue:create
+    "queues": {
+        "producers": [
+            { "binding": "ENRICH_QUEUE", "queue": "music-club-enrich" }
+        ],
+        "consumers": [
+            { "queue": "music-club-enrich", "max_retries": 5, "max_batch_size": 10 }
+        ]
+    },
+    // Daily soft reminder for listening windows (17:00 UTC).
+    "triggers": {
+        "crons": ["0 17 * * *"]
+    }
+    // Secrets (NOT stored here):
+    //   DISCORD_PUBLIC_KEY  - app's Ed25519 public key (hex), for request verification
+    //   DISCORD_BOT_TOKEN   - bot token, for REST calls (announcements, threads)
+    //   DISCORD_APP_ID      - application id
+    // Local: put them in .dev.vars   |   Prod: `wrangler secret put <NAME>`
+}

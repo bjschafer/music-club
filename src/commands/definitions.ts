@@ -41,6 +41,7 @@ export const commands = [
         type: 3,
         required: true,
       },
+      { name: "artist", description: "Artist / band", type: 3, required: true },
       {
         name: "type",
         description: "Song or album (defaults to album)",
@@ -51,7 +52,6 @@ export const commands = [
           { name: "Song", value: "song" },
         ],
       },
-      { name: "artist", description: "Artist / band", type: 3, required: false },
       { name: "why", description: "Why you picked it", type: 3, required: false },
       {
         name: "listen_days",

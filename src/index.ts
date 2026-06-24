@@ -30,8 +30,6 @@ import {
   listArchivedRounds,
   clubCounts,
   resetClub,
-  getRoundById,
-  setSonglink,
   listRoundsNeedingReminder,
   markReminded,
   type Club,
@@ -248,7 +246,7 @@ async function handlePick(
     title: String(getOption(interaction, "title")),
     url: String(getOption(interaction, "url")),
     type: String(getOption(interaction, "type") ?? "album"),
-    artist: artist !== undefined ? String(artist) : null,
+    artist: String(artist),
     note: why !== undefined ? String(why) : null,
     listen_by: listenBy,
     thread_id: null,
@@ -273,15 +271,13 @@ async function handlePick(
           message.id,
           threadName(round.title),
         );
-        const saved = await createRound(c.env.DB, { ...round, thread_id: thread.id });
+        await createRound(c.env.DB, { ...round, thread_id: thread.id });
         await incrementPicks(c.env.DB, member.id);
         await rest.editOriginalResponse(token, {
           content: `✅ Posted **${round.title}** — discussion in <#${thread.id}>. Listening window ends <t:${listenBy}:R>.`,
         });
-        // Enrich with a universal song.link URL — best effort, don't fail the pick.
-        await enrichRound(c.env, saved.id).catch((err) => {
-          console.error("[enrich] failed:", err instanceof Error ? err.message : err);
-        });
+        // Post search links for all major platforms — best effort, don't fail the pick.
+        await postSearchLinks(rest, thread.id, round.title, String(artist)).catch(() => {});
       } catch (err) {
         const detail = err instanceof Error ? err.message : "unknown error";
         await rest
@@ -500,20 +496,20 @@ function reply(c: AppContext, content: string, ephemeral = false) {
   });
 }
 
-async function enrichRound(env: Env, roundId: number): Promise<void> {
-  const round = await getRoundById(env.DB, roundId);
-  if (!round || round.songlink_url) return; // gone or already enriched
-
-  // Construct a song.link universal URL directly — no API call, no rate limits.
-  const pageUrl = `https://song.link/?url=${encodeURIComponent(round.url)}`;
-
-  await setSonglink(env.DB, round.id, pageUrl);
-  if (round.thread_id) {
-    const rest = new DiscordRest(env.DISCORD_BOT_TOKEN, env.DISCORD_APP_ID);
-    await rest.createMessage(round.thread_id, {
-      content: `🔗 Listen on your platform of choice: ${pageUrl}`,
-    });
-  }
+async function postSearchLinks(
+  rest: DiscordRest,
+  threadId: string,
+  title: string,
+  artist: string,
+): Promise<void> {
+  const q = encodeURIComponent(`${artist} ${title}`);
+  const links = [
+    `[Spotify](https://open.spotify.com/search/${q})`,
+    `[Apple Music](https://music.apple.com/search?term=${q})`,
+    `[YouTube Music](https://music.youtube.com/search?q=${q})`,
+    `[YouTube](https://www.youtube.com/results?search_query=${q})`,
+  ].join(" · ");
+  await rest.createMessage(threadId, { content: `🔍 Find it on: ${links}` });
 }
 
 // Cron handler: nudge listening windows that are nearly up, once each.

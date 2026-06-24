@@ -250,18 +250,6 @@ export function getMemberById(db: D1Database, id: number): Promise<Member | null
   return db.prepare("SELECT * FROM members WHERE id = ?").bind(id).first<Member>();
 }
 
-export function getRoundById(db: D1Database, id: number): Promise<Round | null> {
-  return db.prepare("SELECT * FROM rounds WHERE id = ?").bind(id).first<Round>();
-}
-
-export async function setSonglink(
-  db: D1Database,
-  roundId: number,
-  url: string,
-): Promise<void> {
-  await db.prepare("UPDATE rounds SET songlink_url = ? WHERE id = ?").bind(url, roundId).run();
-}
-
 // Listening rounds whose window ends at or before `soon` and haven't been
 // reminded yet. Spans all guilds — the cron iterates every club at once.
 export async function listRoundsNeedingReminder(

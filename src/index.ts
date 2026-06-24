@@ -136,8 +136,13 @@ async function handleJoin(c: AppContext, interaction: DiscordInteraction) {
   if (result === "already_active") {
     return reply(c, `You're already in the rotation, **${member.display_name}**.`, true);
   }
-  const msg = result === "rejoined"
-    ? `🎧 Welcome back, **${member.display_name}**! You're queued up at the end of the rotation.`
+  if (result === "rejoined") {
+    return reply(c, `🎧 Welcome back, **${member.display_name}**! You're queued up at the end of the rotation.`);
+  }
+  const club = await getClub(c.env.DB, interaction.guild_id!);
+  const isOnDeck = club?.current_dj_id === member.id;
+  const msg = isOnDeck
+    ? `🎧 **${member.display_name}** joined the rotation and is on deck — \`/pick\` something!`
     : `🎧 **${member.display_name}** joined the rotation! Use \`/rotation\` to see the lineup.`;
   return reply(c, msg);
 }
@@ -266,8 +271,8 @@ async function handlePick(
   const announceChannel = club.announce_channel_id;
   const djName = member.display_name;
 
-  // Posting + threading (and later, link enrichment) can exceed Discord's 3s
-  // window, so acknowledge with a deferred response and finish in the background.
+  // Posting, threading, and search links can exceed Discord's 3s window, so
+  // acknowledge with a deferred response and finish in the background.
   c.executionCtx.waitUntil(
     (async () => {
       try {
@@ -346,15 +351,16 @@ async function handleNowPlaying(
     );
   }
 
+  const status = round.status === "discussing" ? "Discussing" : "Listening";
   const lines = [
     `🎧 **${round.title}**${round.artist ? ` — ${round.artist}` : ""}`,
-    `Picked by ${round.dj_name} · ${round.type === "album" ? "Album" : "Song"} · _${round.status}_`,
+    `Picked by ${round.dj_name} · ${round.type === "album" ? "Album" : "Song"} · _${status}_`,
     round.url,
   ];
   if (round.note) lines.push(`> ${round.note}`);
   if (round.listen_by) lines.push(`Listen by <t:${round.listen_by}:D> (<t:${round.listen_by}:R>)`);
   if (round.thread_id) lines.push(`Discussion: <#${round.thread_id}>`);
-  return reply(c, lines.join("\n"));
+  return reply(c, lines.join("\n"), false, 4);
 }
 
 async function handleDiscuss(
@@ -398,11 +404,13 @@ async function handleWrap(
   // Advance the rotation pointer from whoever is on deck (the picker).
   const current = await getMemberById(c.env.DB, club.current_dj_id ?? round.dj_id);
   const next = current ? await advanceRotation(c.env.DB, guildId, current) : null;
+  const nextBlurb = !next
+    ? ""
+    : next.id === current?.id
+      ? ` **${next.display_name}** is still on deck — \`/pick\` when ready.`
+      : ` <@${next.discord_id}> is on deck — \`/pick\` when ready.`;
 
-  return reply(
-    c,
-    `📦 Wrapped **${round.title}**.${next ? ` <@${next.discord_id}> is on deck — \`/pick\` when ready.` : ""}`,
-  );
+  return reply(c, `📦 Wrapped **${round.title}**.${nextBlurb}`);
 }
 
 async function handleHistory(
@@ -498,10 +506,12 @@ function buildAnnouncement(round: NewRound, djName: string, listenBy: number) {
 }
 
 // Build a CHANNEL_MESSAGE_WITH_SOURCE response; ephemeral replies are invoker-only.
-function reply(c: AppContext, content: string, ephemeral = false) {
+// Pass extraFlags to OR in additional Discord message flags (e.g. 4 = SUPPRESS_EMBEDS).
+function reply(c: AppContext, content: string, ephemeral = false, extraFlags = 0) {
+  const flags = (ephemeral ? MessageFlags.EPHEMERAL : 0) | extraFlags;
   return c.json({
     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-    data: ephemeral ? { content, flags: MessageFlags.EPHEMERAL } : { content },
+    data: flags ? { content, flags } : { content },
   });
 }
 

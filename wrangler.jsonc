@@ -18,16 +18,6 @@
             "database_id": "3f130ae1-2c37-4042-89be-403d5689a12f"
         }
     ],
-    // Background link enrichment (song.link). Create with:
-    //   bun run queue:create
-    "queues": {
-        "producers": [
-            { "binding": "ENRICH_QUEUE", "queue": "music-club-enrich" }
-        ],
-        "consumers": [
-            { "queue": "music-club-enrich", "max_retries": 5, "max_batch_size": 10 }
-        ]
-    },
     // Daily soft reminder for listening windows (17:00 UTC).
     "triggers": {
         "crons": ["0 17 * * *"]

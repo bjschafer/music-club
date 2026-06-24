@@ -41,19 +41,11 @@ import {
 } from "./store";
 import { fetchSonglink } from "./songlink";
 
-// A unit of background work: enrich a round's link with a song.link universal URL.
-export interface EnrichMessage {
-  type: "enrich";
-  guildId: string;
-  roundId: number;
-}
-
 export interface Env {
   DB: D1Database;
   DISCORD_PUBLIC_KEY: string;
   DISCORD_BOT_TOKEN: string;
   DISCORD_APP_ID: string;
-  ENRICH_QUEUE: Queue<EnrichMessage>;
 }
 
 type AppContext = Context<{ Bindings: Env }>;
@@ -287,12 +279,8 @@ async function handlePick(
         await rest.editOriginalResponse(token, {
           content: `✅ Posted **${round.title}** — discussion in <#${thread.id}>. Listening window ends <t:${listenBy}:R>.`,
         });
-        // Enrich the link with a universal song.link URL out-of-band (best effort).
-        await c.env.ENRICH_QUEUE.send({
-          type: "enrich",
-          guildId: saved.guild_id,
-          roundId: saved.id,
-        }).catch(() => {});
+        // Enrich with a universal song.link URL — best effort, don't fail the pick.
+        await enrichRound(c.env, saved.id).catch(() => {});
       } catch (err) {
         const detail = err instanceof Error ? err.message : "unknown error";
         await rest
@@ -511,19 +499,6 @@ function reply(c: AppContext, content: string, ephemeral = false) {
   });
 }
 
-// Queue consumer: enrich each round's link with a song.link universal URL and
-// drop it into the discussion thread. Retries on transient/rate-limit errors.
-async function handleQueue(batch: MessageBatch<EnrichMessage>, env: Env) {
-  for (const message of batch.messages) {
-    try {
-      await enrichRound(env, message.body.roundId);
-      message.ack();
-    } catch {
-      message.retry();
-    }
-  }
-}
-
 async function enrichRound(env: Env, roundId: number): Promise<void> {
   const round = await getRoundById(env.DB, roundId);
   if (!round || round.songlink_url) return; // gone or already enriched
@@ -565,6 +540,5 @@ async function handleScheduled(_event: ScheduledController, env: Env) {
 
 export default {
   fetch: (request: Request, env: Env, ctx: ExecutionContext) => app.fetch(request, env, ctx),
-  queue: handleQueue,
   scheduled: handleScheduled,
 };

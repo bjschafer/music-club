@@ -9,8 +9,7 @@
     "register": "bun run src/commands/register.ts",
     "typecheck": "tsc --noEmit",
     "db:create": "wrangler d1 create music-club",
-    "queue:create": "wrangler queues create music-club-enrich",
-    "db:migrate:local": "wrangler d1 migrations apply music-club --local",
+"db:migrate:local": "wrangler d1 migrations apply music-club --local",
     "db:migrate:remote": "wrangler d1 migrations apply music-club --remote"
   },
   "dependencies": {

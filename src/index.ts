@@ -150,7 +150,7 @@ async function handleLeave(c: AppContext, interaction: DiscordInteraction) {
   }
   const next = await leaveRotation(c.env.DB, interaction.guild_id!, member);
   const msg = next
-    ? `👋 **${member.display_name}** left the rotation. **${next.display_name}** is now on deck.`
+    ? `👋 **${member.display_name}** left the rotation. <@${next.discord_id}> is now on deck.`
     : `👋 **${member.display_name}** left the rotation.`;
   return reply(c, msg);
 }
@@ -318,8 +318,8 @@ async function handlePass(
   return reply(
     c,
     next.id === member.id
-      ? `⏭️ ${member.display_name} passed — but you're the only DJ, so you're still on deck.`
-      : `⏭️ **${member.display_name}** passed. **${next.display_name}** is on deck.`,
+      ? `⏭️ **${member.display_name}** passed — but you're the only DJ, so you're still on deck.`
+      : `⏭️ **${member.display_name}** passed. <@${next.discord_id}> is on deck.`,
   );
 }
 
@@ -392,7 +392,7 @@ async function handleWrap(
 
   return reply(
     c,
-    `📦 Wrapped **${round.title}**.${next ? ` **${next.display_name}** is on deck — \`/pick\` when ready.` : ""}`,
+    `📦 Wrapped **${round.title}**.${next ? ` <@${next.discord_id}> is on deck — \`/pick\` when ready.` : ""}`,
   );
 }
 
@@ -510,7 +510,7 @@ async function postSearchLinks(
     `[YouTube Music](https://music.youtube.com/search?q=${q})`,
     `[YouTube](https://www.youtube.com/results?search_query=${q})`,
   ].join(" · ");
-  await rest.createMessage(threadId, { content: `🔍 Find it on: ${links}` });
+  await rest.createMessage(threadId, { content: `🔍 Find it on: ${links}`, flags: 4 });
 }
 
 // Cron handler: nudge listening windows that are nearly up, once each.

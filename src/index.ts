@@ -12,7 +12,10 @@ import {
 } from "./discord/types";
 import { DiscordRest } from "./discord/rest";
 import {
-  touchClubAndMember,
+  touchClub,
+  getMemberByDiscordId,
+  joinRotation,
+  leaveRotation,
   getClub,
   listMembers,
   updateClubConfig,
@@ -105,31 +108,62 @@ async function handleCommand(c: AppContext, interaction: DiscordInteraction) {
     return reply(c, "Use this inside a server — Music Club runs per server.", true);
   }
 
-  // Lazily bootstrap the club and register the invoker as a member.
-  const { club, member } = await touchClubAndMember(c.env.DB, interaction);
+  const club = await touchClub(c.env.DB, interaction.guild_id);
 
   switch (name) {
+    case "join":
+      return handleJoin(c, interaction);
+    case "leave":
+      return handleLeave(c, interaction);
     case "rotation":
       return handleRotation(c, interaction, club);
     case "setup":
       return handleSetup(c, interaction, club);
-    case "pick":
-      return handlePick(c, interaction, club, member);
-    case "pass":
-      return handlePass(c, interaction, club, member);
     case "nowplaying":
       return handleNowPlaying(c, interaction, club);
-    case "discuss":
-      return handleDiscuss(c, interaction, club, member);
-    case "wrap":
-      return handleWrap(c, interaction, club, member);
     case "history":
       return handleHistory(c, interaction, club);
     case "club":
       return handleClub(c, interaction, club);
+    case "pick":
+    case "pass":
+    case "discuss":
+    case "wrap": {
+      const user = (interaction.member?.user ?? interaction.user)!;
+      const member = await getMemberByDiscordId(c.env.DB, interaction.guild_id, user.id);
+      if (!member) return reply(c, "You're not in the rotation yet — use `/join` to join.", true);
+      if (name === "pick") return handlePick(c, interaction, club, member);
+      if (name === "pass") return handlePass(c, interaction, club, member);
+      if (name === "discuss") return handleDiscuss(c, interaction, club, member);
+      return handleWrap(c, interaction, club, member);
+    }
     default:
       return reply(c, `Unknown command: \`${name}\``, true);
   }
+}
+
+async function handleJoin(c: AppContext, interaction: DiscordInteraction) {
+  const { member, result } = await joinRotation(c.env.DB, interaction);
+  if (result === "already_active") {
+    return reply(c, `You're already in the rotation, **${member.display_name}**.`, true);
+  }
+  const msg = result === "rejoined"
+    ? `🎧 Welcome back, **${member.display_name}**! You're queued up at the end of the rotation.`
+    : `🎧 **${member.display_name}** joined the rotation! Use \`/rotation\` to see the lineup.`;
+  return reply(c, msg);
+}
+
+async function handleLeave(c: AppContext, interaction: DiscordInteraction) {
+  const user = (interaction.member?.user ?? interaction.user)!;
+  const member = await getMemberByDiscordId(c.env.DB, interaction.guild_id!, user.id);
+  if (!member) {
+    return reply(c, "You're not in the rotation.", true);
+  }
+  const next = await leaveRotation(c.env.DB, interaction.guild_id!, member);
+  const msg = next
+    ? `👋 **${member.display_name}** left the rotation. **${next.display_name}** is now on deck.`
+    : `👋 **${member.display_name}** left the rotation.`;
+  return reply(c, msg);
 }
 
 async function handleRotation(

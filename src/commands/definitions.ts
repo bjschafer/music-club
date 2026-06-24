@@ -14,6 +14,16 @@ export const commands = [
     type: 1,
   },
   {
+    name: "join",
+    description: "Join the DJ rotation for this server's music club",
+    type: 1,
+  },
+  {
+    name: "leave",
+    description: "Remove yourself from the DJ rotation",
+    type: 1,
+  },
+  {
     name: "rotation",
     description: "Show the DJ rotation and who's on deck",
     type: 1,

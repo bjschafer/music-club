@@ -30,43 +30,109 @@ function displayNameOf(i: DiscordInteraction): string {
   return u?.global_name ?? u?.username ?? "Unknown";
 }
 
-// Lazily create this guild's club and ensure the invoker is a member. Without a
-// gateway connection there's no "bot added" event, so first command use is what
-// bootstraps a club. The first member to appear becomes the DJ on deck.
-export async function touchClubAndMember(
-  db: D1Database,
-  interaction: DiscordInteraction,
-): Promise<{ club: Club; member: Member }> {
-  const guildId = interaction.guild_id!;
-  const user = interaction.member?.user ?? interaction.user!;
-
+// Lazily create this guild's club. Without a gateway connection there's no
+// "bot added" event, so first command use bootstraps the club.
+export async function touchClub(db: D1Database, guildId: string): Promise<Club> {
   await db
     .prepare("INSERT INTO clubs (guild_id) VALUES (?) ON CONFLICT (guild_id) DO NOTHING")
     .bind(guildId)
     .run();
+  return (await getClub(db, guildId))!;
+}
 
-  // Insert the member with the next rotation slot, or refresh their name if they
-  // already exist. RETURNING gives us the row in both cases.
-  const member = await db
-    .prepare(
-      `INSERT INTO members (guild_id, discord_id, display_name, rotation_pos)
-       VALUES (?1, ?2, ?3,
-               (SELECT COALESCE(MAX(rotation_pos), -1) + 1 FROM members WHERE guild_id = ?1))
-       ON CONFLICT (guild_id, discord_id)
-       DO UPDATE SET display_name = excluded.display_name
-       RETURNING *`,
-    )
-    .bind(guildId, user.id, displayNameOf(interaction))
+// Look up an active member by their Discord user ID without creating one.
+export function getMemberByDiscordId(
+  db: D1Database,
+  guildId: string,
+  discordId: string,
+): Promise<Member | null> {
+  return db
+    .prepare("SELECT * FROM members WHERE guild_id = ? AND discord_id = ? AND active = 1")
+    .bind(guildId, discordId)
+    .first<Member>();
+}
+
+// Explicitly add (or reactivate) a member.
+// result: "already_active" = no change; "rejoined" = reactivated; "joined" = brand new.
+export async function joinRotation(
+  db: D1Database,
+  interaction: DiscordInteraction,
+): Promise<{ member: Member; result: "already_active" | "rejoined" | "joined" }> {
+  const guildId = interaction.guild_id!;
+  const user = (interaction.member?.user ?? interaction.user)!;
+  const name = displayNameOf(interaction);
+
+  const existing = await db
+    .prepare("SELECT * FROM members WHERE guild_id = ? AND discord_id = ?")
+    .bind(guildId, user.id)
     .first<Member>();
 
-  // Nobody on deck yet → the first member becomes the current DJ.
+  if (existing?.active) {
+    return { member: existing, result: "already_active" };
+  }
+
+  let member: Member;
+  if (existing) {
+    // Reactivate at the end of the current rotation order.
+    const tail = await db
+      .prepare("SELECT COALESCE(MAX(rotation_pos), -1) + 1 AS next FROM members WHERE guild_id = ?")
+      .bind(guildId)
+      .first<{ next: number }>();
+    member = (await db
+      .prepare("UPDATE members SET active = 1, rotation_pos = ?, display_name = ? WHERE id = ? RETURNING *")
+      .bind(tail!.next, name, existing.id)
+      .first<Member>())!;
+  } else {
+    member = (await db
+      .prepare(
+        `INSERT INTO members (guild_id, discord_id, display_name, rotation_pos)
+         VALUES (?1, ?2, ?3,
+                 (SELECT COALESCE(MAX(rotation_pos), -1) + 1 FROM members WHERE guild_id = ?1))
+         RETURNING *`,
+      )
+      .bind(guildId, user.id, name)
+      .first<Member>())!;
+  }
+
+  // First active member in the club becomes the DJ on deck.
   await db
-    .prepare("UPDATE clubs SET current_dj_id = ?1 WHERE guild_id = ?2 AND current_dj_id IS NULL")
-    .bind(member!.id, guildId)
+    .prepare("UPDATE clubs SET current_dj_id = ? WHERE guild_id = ? AND current_dj_id IS NULL")
+    .bind(member.id, guildId)
     .run();
 
+  return { member, result: existing ? "rejoined" : "joined" };
+}
+
+// Remove a member from the active rotation. If they were on deck, advances to
+// the next active member (or clears the pointer if the rotation is now empty).
+// Returns the new on-deck member, or null if the rotation is now empty.
+export async function leaveRotation(
+  db: D1Database,
+  guildId: string,
+  member: Member,
+): Promise<Member | null> {
+  await db.prepare("UPDATE members SET active = 0 WHERE id = ?").bind(member.id).run();
+
   const club = await getClub(db, guildId);
-  return { club: club!, member: member! };
+  if (club?.current_dj_id !== member.id) return null;
+
+  // They were on deck — hand off to next active member, if any.
+  const next = await db
+    .prepare(
+      "SELECT * FROM members WHERE guild_id = ? AND active = 1 ORDER BY rotation_pos LIMIT 1",
+    )
+    .bind(guildId)
+    .first<Member>();
+
+  if (!next) {
+    await db
+      .prepare("UPDATE clubs SET current_dj_id = NULL WHERE guild_id = ?")
+      .bind(guildId)
+      .run();
+    return null;
+  }
+
+  return advanceRotation(db, guildId, member);
 }
 
 export function getClub(db: D1Database, guildId: string): Promise<Club | null> {

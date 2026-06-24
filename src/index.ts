@@ -504,8 +504,9 @@ async function postSearchLinks(
 ): Promise<void> {
   const q = encodeURIComponent(`${artist} ${title}`);
   const links = [
-    `[Spotify](https://open.spotify.com/search/${q})`,
+    `[Spotify](https://open.spotify.com/search?q=${q})`,
     `[Apple Music](https://music.apple.com/search?term=${q})`,
+    `[Tidal](https://tidal.com/search?q=${q})`,
     `[YouTube Music](https://music.youtube.com/search?q=${q})`,
     `[YouTube](https://www.youtube.com/results?search_query=${q})`,
   ].join(" · ");

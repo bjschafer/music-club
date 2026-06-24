@@ -237,6 +237,15 @@ async function handlePick(
   const artist = getOption(interaction, "artist");
   const why = getOption(interaction, "why");
   const listenDays = getOption(interaction, "listen_days");
+
+  const url = String(getOption(interaction, "url"));
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error();
+  } catch {
+    return reply(c, "The URL must start with `http://` or `https://`.", true);
+  }
+
   const days = listenDays !== undefined ? Number(listenDays) : club.default_listen_days;
   const listenBy = Math.floor(Date.now() / 1000) + days * 86400;
 
@@ -244,7 +253,7 @@ async function handlePick(
     guild_id: interaction.guild_id!,
     dj_id: member.id,
     title: String(getOption(interaction, "title")),
-    url: String(getOption(interaction, "url")),
+    url,
     type: String(getOption(interaction, "type") ?? "album"),
     artist: String(artist),
     note: why !== undefined ? String(why) : null,

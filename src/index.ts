@@ -39,7 +39,6 @@ import {
   type Member,
   type NewRound,
 } from "./store";
-import { fetchSonglink } from "./songlink";
 
 export interface Env {
   DB: D1Database;
@@ -280,7 +279,9 @@ async function handlePick(
           content: `✅ Posted **${round.title}** — discussion in <#${thread.id}>. Listening window ends <t:${listenBy}:R>.`,
         });
         // Enrich with a universal song.link URL — best effort, don't fail the pick.
-        await enrichRound(c.env, saved.id).catch(() => {});
+        await enrichRound(c.env, saved.id).catch((err) => {
+          console.error("[enrich] failed:", err instanceof Error ? err.message : err);
+        });
       } catch (err) {
         const detail = err instanceof Error ? err.message : "unknown error";
         await rest
@@ -503,8 +504,8 @@ async function enrichRound(env: Env, roundId: number): Promise<void> {
   const round = await getRoundById(env.DB, roundId);
   if (!round || round.songlink_url) return; // gone or already enriched
 
-  const pageUrl = await fetchSonglink(round.url); // throws on 429 → message retries
-  if (!pageUrl) return; // unsupported link — nothing to add
+  // Construct a song.link universal URL directly — no API call, no rate limits.
+  const pageUrl = `https://song.link/?url=${encodeURIComponent(round.url)}`;
 
   await setSonglink(env.DB, round.id, pageUrl);
   if (round.thread_id) {

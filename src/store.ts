@@ -267,6 +267,20 @@ export async function listRoundsNeedingReminder(
   return results;
 }
 
+export async function extendListenBy(
+  db: D1Database,
+  guildId: string,
+  extraSeconds: number,
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE rounds SET listen_by = listen_by + ?, reminded_at = NULL
+       WHERE guild_id = ? AND status IN ('listening', 'discussing')`,
+    )
+    .bind(extraSeconds, guildId)
+    .run();
+}
+
 export async function markReminded(
   db: D1Database,
   roundId: number,

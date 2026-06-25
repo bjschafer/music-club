@@ -49,13 +49,20 @@ export const commands = [
         ],
       },
       { name: "why", description: "Why you picked it", type: 3, required: false },
+    ],
+  },
+  {
+    name: "extend",
+    description: "Extend the current listening window (DJ or admin)",
+    type: 1,
+    options: [
       {
-        name: "listen_days",
-        description: "Override the listening window, in days",
+        name: "days",
+        description: "Number of days to add to the listening window",
         type: 4, // INTEGER
-        required: false,
+        required: true,
         min_value: 1,
-        max_value: 60,
+        max_value: 30,
       },
     ],
   },

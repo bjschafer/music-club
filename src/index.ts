@@ -27,6 +27,7 @@ import {
   advanceRotation,
   markDiscussing,
   wrapActiveRound,
+  extendListenBy,
   listArchivedRounds,
   clubCounts,
   resetClub,
@@ -117,13 +118,15 @@ async function handleCommand(c: AppContext, interaction: DiscordInteraction) {
     case "pick":
     case "pass":
     case "discuss":
-    case "wrap": {
+    case "wrap":
+    case "extend": {
       const user = (interaction.member?.user ?? interaction.user)!;
       const member = await getMemberByDiscordId(c.env.DB, interaction.guild_id, user.id);
       if (!member) return reply(c, "You're not in the rotation yet — use `/join` to join.", true);
       if (name === "pick") return handlePick(c, interaction, club, member);
       if (name === "pass") return handlePass(c, interaction, club, member);
       if (name === "discuss") return handleDiscuss(c, interaction, club, member);
+      if (name === "extend") return handleExtend(c, interaction, club, member);
       return handleWrap(c, interaction, club, member);
     }
     default:
@@ -252,7 +255,6 @@ async function handlePick(
 
   const artist = getOption(interaction, "artist");
   const why = getOption(interaction, "why");
-  const listenDays = getOption(interaction, "listen_days");
 
   const url = String(getOption(interaction, "url"));
   try {
@@ -262,7 +264,7 @@ async function handlePick(
     return reply(c, "The URL must start with `http://` or `https://`.", true);
   }
 
-  const days = listenDays !== undefined ? Number(listenDays) : club.default_listen_days;
+  const days = club.default_listen_days;
   const listenBy = Math.floor(Date.now() / 1000) + days * 86400;
 
   const round: NewRound = {
@@ -393,6 +395,33 @@ async function handleDiscuss(
   }
   await markDiscussing(c.env.DB, interaction.guild_id!);
   return reply(c, `💬 Discussion is open for **${round.title}**${thread}.`);
+}
+
+async function handleExtend(
+  c: AppContext,
+  interaction: DiscordInteraction,
+  club: Club,
+  member: Member,
+) {
+  const round = await getActiveRound(c.env.DB, interaction.guild_id!);
+  if (!round) {
+    return reply(c, "Nothing's playing right now — nothing to extend.", true);
+  }
+  if (!(member.id === round.dj_id || isAdmin(interaction, club))) {
+    return reply(c, "Only the DJ who picked this (or an admin) can extend the listening window.", true);
+  }
+  if (!round.listen_by) {
+    return reply(c, "This round has no listening window set.", true);
+  }
+
+  const days = Number(getOption(interaction, "days"));
+  await extendListenBy(c.env.DB, interaction.guild_id!, days * 86400);
+
+  const newListenBy = round.listen_by + days * 86400;
+  return reply(
+    c,
+    `⏳ Extended the listening window for **${round.title}** by ${days} day(s) — now ends <t:${newListenBy}:D> (<t:${newListenBy}:R>).`,
+  );
 }
 
 async function handleWrap(

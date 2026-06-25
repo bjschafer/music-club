@@ -153,6 +153,17 @@ async function handleLeave(c: AppContext, interaction: DiscordInteraction) {
   if (!member) {
     return reply(c, "You're not in the rotation.", true);
   }
+  const club = await getClub(c.env.DB, interaction.guild_id!);
+  if (club?.current_dj_id === member.id) {
+    const active = await getActiveRound(c.env.DB, interaction.guild_id!);
+    if (active) {
+      return reply(
+        c,
+        `You have an active pick — **${active.title}**. Wrap it with \`/wrap\` first, or ask an admin to wrap it for you.`,
+        true,
+      );
+    }
+  }
   const next = await leaveRotation(c.env.DB, interaction.guild_id!, member);
   const msg = next
     ? `👋 **${member.display_name}** left the rotation. <@${next.discord_id}> is now on deck.`
@@ -401,8 +412,10 @@ async function handleWrap(
 
   await wrapActiveRound(c.env.DB, guildId, Math.floor(Date.now() / 1000));
 
-  // Advance the rotation pointer from whoever is on deck (the picker).
-  const current = await getMemberById(c.env.DB, club.current_dj_id ?? round.dj_id);
+  // Advance from the picker's rotation slot, not whoever happens to be current_dj_id
+  // now — the picker may have left since posting, which would have already advanced
+  // current_dj_id and would cause a double-skip here.
+  const current = await getMemberById(c.env.DB, round.dj_id);
   const next = current ? await advanceRotation(c.env.DB, guildId, current) : null;
   const nextBlurb = !next
     ? ""

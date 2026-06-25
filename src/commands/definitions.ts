@@ -1,10 +1,6 @@
-// Slash command definitions registered with Discord via `npm run register`.
-//
-// Stage 1 ships only `/ping`. Later stages add /pick, /pass, /nowplaying,
-// /rotation, /discuss, /wrap, /history, /setup — see IMPLEMENTATION_PLAN.md.
-//
+// Slash command definitions registered with Discord via `bun run register`.
 // command type 1 = CHAT_INPUT.
-// option types: STRING=3, INTEGER=4, BOOLEAN=5, USER=6, CHANNEL=7.
+// option types: STRING=3, INTEGER=4, BOOLEAN=5, USER=6, CHANNEL=7, ROLE=8.
 // default_member_permissions gates admin-only commands (e.g. "32" = Manage Server).
 
 export const commands = [

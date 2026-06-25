@@ -58,6 +58,23 @@ Three tables, all scoped by `guild_id`:
 
 `touchClub()` lazily creates a club row on first command use (no "bot added" gateway event available).
 
+Round lifecycle:
+```
+/pick ──► LISTENING ──/discuss──► DISCUSSING ──/wrap──► ARCHIVED
+          (window to                (thread open;        (rotation advances
+           actually listen)          discuss it)          → next DJ on deck)
+
+/pass at your turn → rotation advances, no round created
+```
+
+### Not planned
+
+These were explicitly deferred and are not missing by accident:
+- **Ratings / Hall of Fame** — `rounds` keeps full history; this would be a pure additive read query
+- Suggestion box (a stuck DJ just `/pass`es)
+- AI discussion prompts / end-of-round summaries
+- Read-only web view for history
+
 ### Secrets / environment
 
 Secrets are **not** in `wrangler.jsonc`. Locally: `.dev.vars`. Production: `wrangler secret put`.

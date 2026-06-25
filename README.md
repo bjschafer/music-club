@@ -3,21 +3,25 @@
 A multi-tenant Discord bot for running a "book club for music" — DJ rotation,
 manual cadence, discussion in threads. Built on Cloudflare Workers + D1.
 
-See [`DESIGN.md`](./DESIGN.md) for the design and [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md)
-for the staged build. **All five stages are implemented:**
-`/ping`, `/setup`, `/rotation`, `/pick`, `/pass`, `/nowplaying`, `/discuss`,
-`/wrap`, `/history`, and `/club reset`, plus song.link link enrichment (via a
-Queue) and a daily listening-window reminder (via cron). Run `bun run register`
-after changing commands and `bun run deploy` after changing code.
+[![Add to Discord](https://img.shields.io/badge/Add%20to%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com/oauth2/authorize?client_id=1518811119266037770&permissions=309237664768&scope=bot+applications.commands)
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/bjschafer/music-club)
 
-### Queue (link enrichment)
+## Commands
 
-`/pick` enqueues a job that fetches a [song.link](https://odesli.co/) universal
-URL and drops it in the discussion thread. Create the queue once:
-
-```sh
-bun run queue:create        # wrangler queues create music-club-enrich
-```
+| Command | Who | Description |
+|---|---|---|
+| `/ping` | anyone | Check that the bot is alive |
+| `/join` | anyone | Join the DJ rotation |
+| `/leave` | anyone | Remove yourself from the rotation |
+| `/rotation` | anyone | Show the rotation and who's on deck |
+| `/pick` | current DJ | Post a pick (opens an announcement + thread) |
+| `/extend` | DJ or admin | Add days to the current listening window |
+| `/pass` | current DJ | Skip your turn; rotation advances |
+| `/nowplaying` | anyone | Show the current pick and thread link |
+| `/wrap` | DJ or admin | Archive the pick and pass the baton |
+| `/history` | anyone | Show recently wrapped picks |
+| `/setup` | admin | Configure announce channel, admin role, default listen days |
+| `/club reset` | admin | Wipe all club data for this server |
 
 ### Permissions for `/pick`
 
@@ -55,7 +59,7 @@ then set the channel with `/setup announce_channel:#your-channel`.
 
 ```sh
 bun run dev          # local Worker at http://localhost:8787
-bun run register     # register the /ping slash command
+bun run register     # register slash commands with Discord
 ```
 
 Slash commands are sent to Discord, not your Worker, so registration is a
@@ -81,23 +85,27 @@ bun run deploy
 
 Set the production **Interactions Endpoint URL** to `https://<your-worker>.workers.dev/interactions`.
 
+Deploys also happen automatically on push to `main` via the Cloudflare GitHub integration.
+
 ## Add the bot to a server
 
-Use an OAuth2 install link with the `bot` and `applications.commands` scopes
-(Discord Developer Portal → OAuth2 → URL Generator). Each server that adds the
-bot becomes its own independent club (scoped by `guild_id`).
+Each server that adds the bot gets its own independent club (scoped by `guild_id`). After adding, run `/setup` to configure your announcement channel.
 
-## Layout
+### Round lifecycle
 
 ```
-src/
-  index.ts            Hono app: /interactions endpoint, PING handshake, command router
-  discord/
-    verify.ts         Ed25519 signature verification (native Web Crypto)
-    types.ts          Interaction/response type constants + payload shapes
-  commands/
-    definitions.ts    Slash command definitions (Stage 1: /ping)
-    register.ts       One-off script to register commands with Discord
-migrations/
-  0001_init.sql       clubs / members / rounds schema
+/pick ──► LISTENING ──/wrap──► ARCHIVED
+          (window to           (rotation advances
+           listen)              → next DJ on deck)
+
+/pass at your turn → rotation advances, no round created
+/extend at any point → adds days to the listening window
 ```
+
+A partial unique index enforces at most one non-archived round per guild.
+
+### Cron
+
+`wrangler.jsonc` schedules a daily job at 17:00 UTC. It scans all guilds for
+listening rounds whose window ends within the next 24 hours, posts a nudge to
+the discussion thread, and sets `reminded_at` so it doesn't fire again.

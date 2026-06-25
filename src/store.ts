@@ -192,7 +192,6 @@ export interface Round {
   artist: string | null;
   type: string;
   url: string;
-  songlink_url: string | null;
   note: string | null;
   listen_by: number | null;
   status: string;

@@ -4,7 +4,7 @@ A multi-tenant Discord bot for running a "book club for music" — DJ rotation,
 manual cadence, discussion in threads. Built on Cloudflare Workers + D1.
 
 [![Add to Discord](https://img.shields.io/badge/Add%20to%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com/oauth2/authorize?client_id=1518811119266037770&permissions=309237664768&scope=bot+applications.commands)
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/bjschafer/music-club)
+[![Deploy to Cloudflare](https://img.shields.io/badge/Deploy%20to%20Cloudflare-F6821F?style=for-the-badge&logo=cloudflare&logoColor=white)](https://deploy.workers.cloudflare.com/?url=https://github.com/bjschafer/music-club)
 
 ## Commands
 

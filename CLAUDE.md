@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```sh
 bun run dev              # local Worker at http://localhost:8787
-bun run deploy           # deploy to Cloudflare
+bun run deploy           # deploy to Cloudflare manually (skip if pushing to main)
 bun run register         # register/update slash commands with Discord
 bun run typecheck        # tsc --noEmit (no build output, just type errors)
 
@@ -14,8 +14,9 @@ bun run db:migrate:local   # apply new migrations to local D1
 bun run db:migrate:remote  # apply new migrations to production D1
 ```
 
-**After changing slash command definitions** (`src/commands/definitions.ts`), always run `bun run register`.  
-**After changing Worker code**, run `bun run deploy`.
+**Deploys are automatic** — pushing to `main` triggers a Cloudflare Workers build and deploy via the GitHub integration. `bun run deploy` is available for manual/out-of-band deploys only.
+
+**After changing slash command definitions** (`src/commands/definitions.ts`), always run `bun run register`.
 
 ## Architecture
 

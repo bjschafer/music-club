@@ -9,17 +9,17 @@
     "register": "bun run src/commands/register.ts",
     "typecheck": "tsc --noEmit",
     "db:create": "wrangler d1 create music-club",
-"db:migrate:local": "wrangler d1 migrations apply music-club --local",
+    "db:migrate:local": "wrangler d1 migrations apply music-club --local",
     "db:migrate:remote": "wrangler d1 migrations apply music-club --remote"
   },
   "dependencies": {
-    "hono": "^4"
+    "hono": "^4.12.27"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4",
-    "@types/node": "^22",
-    "typescript": "^5",
-    "wrangler": "^4"
+    "@cloudflare/workers-types": "^4.20260625.1",
+    "@types/node": "^22.20.0",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.104.0"
   },
   "trustedDependencies": ["esbuild", "workerd", "sharp"]
 }

@@ -238,7 +238,7 @@ export function getActiveRound(
     .prepare(
       `SELECT r.*, m.display_name AS dj_name
        FROM rounds r JOIN members m ON m.id = r.dj_id
-       WHERE r.guild_id = ? AND r.status IN ('listening', 'discussing')
+       WHERE r.guild_id = ? AND r.status = 'listening'
        LIMIT 1`,
     )
     .bind(guildId)
@@ -275,7 +275,7 @@ export async function extendListenBy(
   await db
     .prepare(
       `UPDATE rounds SET listen_by = listen_by + ?, reminded_at = NULL
-       WHERE guild_id = ? AND status IN ('listening', 'discussing')`,
+       WHERE guild_id = ? AND status = 'listening'`,
     )
     .bind(extraSeconds, guildId)
     .run();
@@ -331,15 +331,7 @@ export async function advanceRotation(
   return next!;
 }
 
-// Flip the active listening round to discussing. No-op if none is listening.
-export async function markDiscussing(db: D1Database, guildId: string): Promise<void> {
-  await db
-    .prepare("UPDATE rounds SET status = 'discussing' WHERE guild_id = ? AND status = 'listening'")
-    .bind(guildId)
-    .run();
-}
-
-// Archive the active round (listening or discussing).
+// Archive the active listening round.
 export async function wrapActiveRound(
   db: D1Database,
   guildId: string,
@@ -347,7 +339,7 @@ export async function wrapActiveRound(
 ): Promise<void> {
   await db
     .prepare(
-      "UPDATE rounds SET status = 'archived', wrapped_at = ? WHERE guild_id = ? AND status IN ('listening', 'discussing')",
+      "UPDATE rounds SET status = 'archived', wrapped_at = ? WHERE guild_id = ? AND status = 'listening'",
     )
     .bind(wrappedAt, guildId)
     .run();

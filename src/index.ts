@@ -25,7 +25,6 @@ import {
   incrementPasses,
   incrementPicks,
   advanceRotation,
-  markDiscussing,
   wrapActiveRound,
   extendListenBy,
   listArchivedRounds,
@@ -117,7 +116,6 @@ async function handleCommand(c: AppContext, interaction: DiscordInteraction) {
       return handleClub(c, interaction, club);
     case "pick":
     case "pass":
-    case "discuss":
     case "wrap":
     case "extend": {
       const user = (interaction.member?.user ?? interaction.user)!;
@@ -125,7 +123,6 @@ async function handleCommand(c: AppContext, interaction: DiscordInteraction) {
       if (!member) return reply(c, "You're not in the rotation yet — use `/join` to join.", true);
       if (name === "pick") return handlePick(c, interaction, club, member);
       if (name === "pass") return handlePass(c, interaction, club, member);
-      if (name === "discuss") return handleDiscuss(c, interaction, club, member);
       if (name === "extend") return handleExtend(c, interaction, club, member);
       return handleWrap(c, interaction, club, member);
     }
@@ -364,37 +361,15 @@ async function handleNowPlaying(
     );
   }
 
-  const status = round.status === "discussing" ? "Discussing" : "Listening";
   const lines = [
     `🎧 **${round.title}**${round.artist ? ` — ${round.artist}` : ""}`,
-    `Picked by ${round.dj_name} · ${round.type === "album" ? "Album" : "Song"} · _${status}_`,
+    `Picked by ${round.dj_name} · ${round.type === "album" ? "Album" : "Song"} · _Listening_`,
     round.url,
   ];
   if (round.note) lines.push(`> ${round.note}`);
   if (round.listen_by) lines.push(`Listen by <t:${round.listen_by}:D> (<t:${round.listen_by}:R>)`);
   if (round.thread_id) lines.push(`Discussion: <#${round.thread_id}>`);
   return reply(c, lines.join("\n"), false, 4);
-}
-
-async function handleDiscuss(
-  c: AppContext,
-  interaction: DiscordInteraction,
-  club: Club,
-  member: Member,
-) {
-  const round = await getActiveRound(c.env.DB, interaction.guild_id!);
-  if (!round) {
-    return reply(c, "Nothing's playing yet — nothing to discuss.", true);
-  }
-  if (!(member.id === round.dj_id || isAdmin(interaction, club))) {
-    return reply(c, "Only the DJ who picked this (or an admin) can open discussion.", true);
-  }
-  const thread = round.thread_id ? ` — <#${round.thread_id}>` : "";
-  if (round.status === "discussing") {
-    return reply(c, `Discussion's already open for **${round.title}**${thread}.`, true);
-  }
-  await markDiscussing(c.env.DB, interaction.guild_id!);
-  return reply(c, `💬 Discussion is open for **${round.title}**${thread}.`);
 }
 
 async function handleExtend(

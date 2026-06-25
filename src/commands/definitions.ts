@@ -77,11 +77,6 @@ export const commands = [
     type: 1,
   },
   {
-    name: "discuss",
-    description: "Open discussion on the current pick (DJ or admin)",
-    type: 1,
-  },
-  {
     name: "wrap",
     description: "Wrap the current pick and pass the baton (DJ or admin)",
     type: 1,

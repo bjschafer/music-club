@@ -27,7 +27,21 @@ export interface Member {
 
 function displayNameOf(i: DiscordInteraction): string {
   const u = i.member?.user ?? i.user;
-  return u?.global_name ?? u?.username ?? "Unknown";
+  return i.member?.nick ?? u?.global_name ?? u?.username ?? "Unknown";
+}
+
+export async function refreshMemberName(
+  db: D1Database,
+  member: Member,
+  interaction: DiscordInteraction,
+): Promise<Member> {
+  const name = displayNameOf(interaction);
+  if (name === member.display_name) return member;
+  const updated = await db
+    .prepare("UPDATE members SET display_name = ? WHERE id = ? RETURNING *")
+    .bind(name, member.id)
+    .first<Member>();
+  return updated ?? member;
 }
 
 // Lazily create this guild's club. Without a gateway connection there's no

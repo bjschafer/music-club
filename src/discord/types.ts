@@ -50,7 +50,7 @@ export interface DiscordInteraction {
   channel_id?: string;
   // In a guild the invoker is under `member.user`; in DMs it's `user`.
   // `permissions` is a bitfield string; `roles` lists the member's role ids.
-  member?: { user: DiscordUser; permissions: string; roles: string[] };
+  member?: { user: DiscordUser; permissions: string; roles: string[]; nick?: string | null };
   user?: DiscordUser;
   data?: {
     id: string;

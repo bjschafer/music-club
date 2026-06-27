@@ -32,6 +32,7 @@ import {
   resetClub,
   listRoundsNeedingReminder,
   markReminded,
+  refreshMemberName,
   type Club,
   type ClubConfig,
   type Member,
@@ -119,8 +120,9 @@ async function handleCommand(c: AppContext, interaction: DiscordInteraction) {
     case "wrap":
     case "extend": {
       const user = (interaction.member?.user ?? interaction.user)!;
-      const member = await getMemberByDiscordId(c.env.DB, interaction.guild_id, user.id);
+      let member = await getMemberByDiscordId(c.env.DB, interaction.guild_id, user.id);
       if (!member) return reply(c, "You're not in the rotation yet — use `/join` to join.", true);
+      member = await refreshMemberName(c.env.DB, member, interaction);
       if (name === "pick") return handlePick(c, interaction, club, member);
       if (name === "pass") return handlePass(c, interaction, club, member);
       if (name === "extend") return handleExtend(c, interaction, club, member);
@@ -149,10 +151,11 @@ async function handleJoin(c: AppContext, interaction: DiscordInteraction) {
 
 async function handleLeave(c: AppContext, interaction: DiscordInteraction) {
   const user = (interaction.member?.user ?? interaction.user)!;
-  const member = await getMemberByDiscordId(c.env.DB, interaction.guild_id!, user.id);
+  let member = await getMemberByDiscordId(c.env.DB, interaction.guild_id!, user.id);
   if (!member) {
     return reply(c, "You're not in the rotation.", true);
   }
+  member = await refreshMemberName(c.env.DB, member, interaction);
   const club = await getClub(c.env.DB, interaction.guild_id!);
   if (club?.current_dj_id === member.id) {
     const active = await getActiveRound(c.env.DB, interaction.guild_id!);

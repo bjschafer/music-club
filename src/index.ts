@@ -31,6 +31,7 @@ import {
   clubCounts,
   resetClub,
   listRoundsNeedingReminder,
+  listExpiredRounds,
   markReminded,
   refreshMemberName,
   type Club,
@@ -571,9 +572,39 @@ async function postSearchLinks(
 // Cron handler: nudge listening windows that are nearly up, once each.
 async function handleScheduled(_event: ScheduledController, env: Env) {
   const now = Math.floor(Date.now() / 1000);
-  const soon = now + 86400; // within the next 24h (or already overdue)
-  const due = await listRoundsNeedingReminder(env.DB, soon);
   const rest = new DiscordRest(env.DISCORD_BOT_TOKEN, env.DISCORD_APP_ID);
+
+  // Auto-wrap rounds whose listening window has fully elapsed: archive the round
+  // and advance the rotation, exactly as a manual /wrap would. Done before the
+  // reminder pass so an already-expired round is wrapped, not nagged.
+  for (const round of await listExpiredRounds(env.DB, now)) {
+    await wrapActiveRound(env.DB, round.guild_id, now);
+
+    // Advance from the picker's slot (mirrors handleWrap): the on-deck DJ during
+    // a listening round is always its picker, since /leave blocks leaving mid-pick.
+    const dj = await getMemberById(env.DB, round.dj_id);
+    const next = dj ? await advanceRotation(env.DB, round.guild_id, dj) : null;
+
+    const club = await getClub(env.DB, round.guild_id);
+    const target = club?.announce_channel_id ?? round.thread_id;
+    if (!target) continue;
+
+    const nextBlurb = !next
+      ? ""
+      : next.id === round.dj_id
+        ? ` **${next.display_name}** is still on deck — \`/pick\` when ready.`
+        : ` <@${next.discord_id}> is on deck — \`/pick\` when ready.`;
+    await rest
+      .createMessage(target, {
+        content: `📦 Listening window for **${round.title}** closed — auto-wrapped.${nextBlurb}`,
+      })
+      .catch(() => {});
+  }
+
+  // Remind on rounds whose window ends within 24h but hasn't elapsed yet (the
+  // expired ones above are already archived, so they won't resurface here).
+  const soon = now + 86400;
+  const due = await listRoundsNeedingReminder(env.DB, soon);
 
   for (const round of due) {
     if (!round.thread_id) {

@@ -54,18 +54,25 @@ This is a **multi-tenant Discord bot** deployed as a Cloudflare Worker. Each Dis
 Three tables, all scoped by `guild_id`:
 - `clubs` — one row per server; `current_dj_id` points to the on-deck member
 - `members` — DJ rotation order via `rotation_pos`; soft-deleted with `active = 0`
-- `rounds` — pick lifecycle: `listening → discussing → archived`; a partial unique index enforces at most one non-archived round per guild
+- `rounds` — pick lifecycle: `listening → archived`; a partial unique index enforces at most one non-archived round per guild
 
 `touchClub()` lazily creates a club row on first command use (no "bot added" gateway event available).
 
-Round lifecycle:
+Round lifecycle (`/pick` opens the discussion thread immediately — there is no
+separate `/discuss` step; the old `discussing` status was dropped in migration
+`0004`):
 ```
-/pick ──► LISTENING ──/discuss──► DISCUSSING ──/wrap──► ARCHIVED
-          (window to                (thread open;        (rotation advances
-           actually listen)          discuss it)          → next DJ on deck)
+/pick ──► LISTENING ──/wrap──► ARCHIVED
+          (thread open;         (rotation advances
+           listening window)     → next DJ on deck)
 
 /pass at your turn → rotation advances, no round created
 ```
+
+A LISTENING round is wrapped one of two ways:
+- **Manually** via `/wrap` (the DJ or an admin).
+- **Automatically** by the cron once `listen_by` has fully elapsed — same archive
+  + rotation-advance as a manual wrap. Extend the window with `/extend` to defer it.
 
 ### Not planned
 
@@ -96,4 +103,6 @@ Then set the Discord app's **Interactions Endpoint URL** to `https://<tunnel>/in
 
 ### Cron
 
-`wrangler.jsonc` schedules `handleScheduled` daily at 17:00 UTC. It scans all guilds for listening rounds whose window ends within the next 24 hours and posts a nudge to the discussion thread, then sets `reminded_at` so it doesn't fire again.
+`wrangler.jsonc` schedules `handleScheduled` daily at 17:00 UTC. Each run, across all guilds:
+1. **Auto-wrap** listening rounds whose `listen_by` has fully elapsed — archives the round, advances the rotation, and posts an "auto-wrapped, next DJ on deck" message to the announce channel (falling back to the thread).
+2. **Remind** on listening rounds whose window ends within the next 24 hours (but hasn't elapsed yet) by posting a nudge to the discussion thread, then sets `reminded_at` so it doesn't fire again.

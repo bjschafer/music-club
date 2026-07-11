@@ -281,6 +281,20 @@ export async function listRoundsNeedingReminder(
   return results;
 }
 
+// Listening rounds whose window has fully elapsed (listen_by at or before now).
+// The cron auto-wraps these and advances the rotation. Spans all guilds.
+export async function listExpiredRounds(db: D1Database, now: number): Promise<Round[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT * FROM rounds
+       WHERE status = 'listening' AND listen_by IS NOT NULL AND listen_by <= ?
+       ORDER BY listen_by`,
+    )
+    .bind(now)
+    .all<Round>();
+  return results;
+}
+
 export async function extendListenBy(
   db: D1Database,
   guildId: string,

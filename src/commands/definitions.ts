@@ -10,6 +10,11 @@ export const commands = [
     type: 1,
   },
   {
+    name: "spin",
+    description: "Give the turntable a spin 🎶",
+    type: 1,
+  },
+  {
     name: "join",
     description: "Join the DJ rotation for this server's music club",
     type: 1,

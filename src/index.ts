@@ -93,6 +93,22 @@ async function handleCommand(c: AppContext, interaction: DiscordInteraction) {
     return reply(c, `🎶 pong — ready to spin some records, ${who}.`, true);
   }
 
+  if (name === "spin") {
+    const who = interactionUser(interaction)?.global_name ?? "friend";
+    const quips = [
+      "🎧 *needle drops* — the record crackles to life…",
+      "💿 round and round it goes, 33⅓ RPM of pure vibes.",
+      "🎶 *wubwubwub* — you spun it backwards. Paul is dead, apparently.",
+      `🪩 the DJ booth is all yours, ${who}. Don't scratch the vinyl.`,
+      "📀 flip to Side B — the deep cuts are where it's at.",
+      "🔊 you gave it a spin and it landed on… silence. Someone forgot to press play.",
+      "🎚️ dropped the crossfader too hard and blew a speaker. Worth it.",
+      "🥁 *record scratch* *freeze frame* — yep, that's you, on deck.",
+    ];
+    const quip = quips[Math.floor(Math.random() * quips.length)];
+    return reply(c, quip);
+  }
+
   // Every other command operates on a guild's club.
   if (!interaction.guild_id) {
     return reply(c, "Use this inside a server — Music Club runs per server.", true);

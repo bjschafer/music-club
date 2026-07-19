@@ -4,7 +4,7 @@
 
 const API = "https://discord.com/api/v10";
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Discord returns `retry_after` (seconds) in a 429 body. Cap the wait so a queue
 // consumer or background task doesn't stall.
@@ -37,6 +37,7 @@ export class DiscordRest {
     method: string,
     path: string,
     body?: unknown,
+    retries = 2,
     attempt = 0,
   ): Promise<T> {
     const res = await fetch(`${API}${path}`, {
@@ -49,9 +50,9 @@ export class DiscordRest {
     });
 
     // Respect Discord rate limits: wait out `retry_after`, then retry briefly.
-    if (res.status === 429 && attempt < 2) {
+    if (res.status === 429 && attempt < retries) {
       await sleep(await retryAfterMs(res));
-      return this.call<T>(method, path, body, attempt + 1);
+      return this.call<T>(method, path, body, retries, attempt + 1);
     }
 
     if (!res.ok) {
@@ -83,8 +84,17 @@ export class DiscordRest {
 
   // Silently add a user to a thread — no join message, no ping. The thread shows
   // up in their sidebar and starts tracking unreads immediately.
+  //
+  // This route rate-limits hard when adding a roster back to back, and a member
+  // who gets dropped never sees the round at all, so it's worth a bigger retry
+  // budget than a one-shot message post.
   addThreadMember(threadId: string, userId: string): Promise<void> {
-    return this.call<void>("PUT", `/channels/${threadId}/thread-members/${userId}`);
+    return this.call<void>(
+      "PUT",
+      `/channels/${threadId}/thread-members/${userId}`,
+      undefined,
+      5,
+    );
   }
 
   // Archive a thread so it drops out of everyone's active-thread list.

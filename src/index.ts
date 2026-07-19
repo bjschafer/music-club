@@ -10,7 +10,7 @@ import {
   type DiscordInteraction,
   type DiscordInteractionOption,
 } from "./discord/types";
-import { DiscordRest } from "./discord/rest";
+import { DiscordRest, sleep } from "./discord/rest";
 import {
   touchClub,
   getMemberByDiscordId,
@@ -317,18 +317,24 @@ async function handlePick(
         );
         await createRound(c.env.DB, { ...round, thread_id: thread.id });
         await incrementPicks(c.env.DB, member.id);
-        await rest.editOriginalResponse(token, {
-          content: `✅ Posted **${round.title}** — discussion in <#${thread.id}>. Listening window ends <t:${listenBy}:R>.`,
-        });
-        // Pull the whole roster into the thread so it lands in their sidebar.
-        // Best effort per member — a stale member (left the server) shouldn't
-        // stop the rest from being added.
-        for (const m of await listMembers(c.env.DB, round.guild_id)) {
-          if (m.id === member.id) continue; // the picker joined by starting the thread
-          await rest.addThreadMember(thread.id, m.discord_id).catch(() => {});
-        }
+        const posted = `✅ Posted **${round.title}** — discussion in <#${thread.id}>. Listening window ends <t:${listenBy}:R>.`;
+        await rest.editOriginalResponse(token, { content: posted });
         // Post search links for all major platforms — best effort, don't fail the pick.
         await postSearchLinks(rest, thread.id, round.title, String(artist)).catch(() => {});
+        // Pull the whole roster into the thread so it lands in their sidebar.
+        // Failures are per-member (a member who left the server shouldn't stop
+        // the rest), but they're reported rather than swallowed — a silently
+        // dropped member never sees the round at all.
+        const missed = await addRosterToThread(c.env.DB, rest, thread.id, member.id, round.guild_id);
+        if (missed.length > 0) {
+          await rest
+            .editOriginalResponse(token, {
+              content:
+                `${posted}\n⚠️ Couldn't add ${missed.length} member(s) to the thread: ` +
+                `${missed.join(", ")}. They can still open it from the announcement.`,
+            })
+            .catch(() => {});
+        }
       } catch (err) {
         const detail = err instanceof Error ? err.message : "unknown error";
         await rest
@@ -565,6 +571,38 @@ function reply(c: AppContext, content: string, ephemeral = false, extraFlags = 0
     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
     data: flags ? { content, flags } : { content },
   });
+}
+
+// Add every active member (except the picker, who joined by starting the thread)
+// to the round's discussion thread. Returns the display names that couldn't be
+// added, so the caller can surface them instead of losing them silently.
+//
+// Paced deliberately: Discord rate-limits this route after a handful of rapid
+// adds, and while `addThreadMember` retries a 429, spacing the calls keeps most
+// of them from ever hitting one.
+async function addRosterToThread(
+  db: D1Database,
+  rest: DiscordRest,
+  threadId: string,
+  pickerId: number,
+  guildId: string,
+): Promise<string[]> {
+  const roster = (await listMembers(db, guildId)).filter((m) => m.id !== pickerId);
+  const missed: string[] = [];
+
+  for (const [i, m] of roster.entries()) {
+    if (i > 0) await sleep(600);
+    try {
+      await rest.addThreadMember(threadId, m.discord_id);
+    } catch (err) {
+      missed.push(m.display_name);
+      console.warn(
+        `addThreadMember failed: guild=${guildId} thread=${threadId} member=${m.discord_id} (${m.display_name})`,
+        err,
+      );
+    }
+  }
+  return missed;
 }
 
 async function postSearchLinks(

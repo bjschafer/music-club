@@ -74,6 +74,12 @@ A LISTENING round is wrapped one of two ways:
 - **Automatically** by the cron once `listen_by` has fully elapsed — same archive
   + rotation-advance as a manual wrap. Extend the window with `/extend` to defer it.
 
+Thread membership is managed explicitly so exactly one discussion thread is ever
+visible: `/pick` silently adds every active member to the new thread (`PUT
+/channels/{thread}/thread-members/{user}` — no ping), and both wrap paths
+`PATCH` the thread to `archived: true`. In the cron the archive must come *after*
+the auto-wrap message, since posting into a thread un-archives it.
+
 ### Not planned
 
 These were explicitly deferred and are not missing by accident:

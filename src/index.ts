@@ -320,6 +320,13 @@ async function handlePick(
         await rest.editOriginalResponse(token, {
           content: `✅ Posted **${round.title}** — discussion in <#${thread.id}>. Listening window ends <t:${listenBy}:R>.`,
         });
+        // Pull the whole roster into the thread so it lands in their sidebar.
+        // Best effort per member — a stale member (left the server) shouldn't
+        // stop the rest from being added.
+        for (const m of await listMembers(c.env.DB, round.guild_id)) {
+          if (m.id === member.id) continue; // the picker joined by starting the thread
+          await rest.addThreadMember(thread.id, m.discord_id).catch(() => {});
+        }
         // Post search links for all major platforms — best effort, don't fail the pick.
         await postSearchLinks(rest, thread.id, round.title, String(artist)).catch(() => {});
       } catch (err) {
@@ -446,6 +453,14 @@ async function handleWrap(
     : next.id === current?.id
       ? ` **${next.display_name}** is still on deck — \`/pick\` when ready.`
       : ` <@${next.discord_id}> is on deck — \`/pick\` when ready.`;
+
+  // Archive the discussion thread so it clears out of everyone's sidebar — the
+  // only visible thread should be the current round's. Background + best effort;
+  // a failed archive shouldn't hold up (or fail) the wrap itself.
+  if (round.thread_id) {
+    const rest = new DiscordRest(c.env.DISCORD_BOT_TOKEN, c.env.DISCORD_APP_ID);
+    c.executionCtx.waitUntil(rest.archiveThread(round.thread_id).catch(() => {}));
+  }
 
   return reply(c, `📦 Wrapped **${round.title}**.${nextBlurb}`);
 }
@@ -587,18 +602,24 @@ async function handleScheduled(_event: ScheduledController, env: Env) {
 
     const club = await getClub(env.DB, round.guild_id);
     const target = club?.announce_channel_id ?? round.thread_id;
-    if (!target) continue;
 
-    const nextBlurb = !next
-      ? ""
-      : next.id === round.dj_id
-        ? ` **${next.display_name}** is still on deck — \`/pick\` when ready.`
-        : ` <@${next.discord_id}> is on deck — \`/pick\` when ready.`;
-    await rest
-      .createMessage(target, {
-        content: `📦 Listening window for **${round.title}** closed — auto-wrapped.${nextBlurb}`,
-      })
-      .catch(() => {});
+    if (target) {
+      const nextBlurb = !next
+        ? ""
+        : next.id === round.dj_id
+          ? ` **${next.display_name}** is still on deck — \`/pick\` when ready.`
+          : ` <@${next.discord_id}> is on deck — \`/pick\` when ready.`;
+      await rest
+        .createMessage(target, {
+          content: `📦 Listening window for **${round.title}** closed — auto-wrapped.${nextBlurb}`,
+        })
+        .catch(() => {});
+    }
+
+    // Archive last: posting to the thread above would un-archive it otherwise.
+    if (round.thread_id) {
+      await rest.archiveThread(round.thread_id).catch(() => {});
+    }
   }
 
   // Remind on rounds whose window ends within 24h but hasn't elapsed yet (the

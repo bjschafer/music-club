@@ -81,6 +81,17 @@ export class DiscordRest {
     );
   }
 
+  // Silently add a user to a thread — no join message, no ping. The thread shows
+  // up in their sidebar and starts tracking unreads immediately.
+  addThreadMember(threadId: string, userId: string): Promise<void> {
+    return this.call<void>("PUT", `/channels/${threadId}/thread-members/${userId}`);
+  }
+
+  // Archive a thread so it drops out of everyone's active-thread list.
+  archiveThread(threadId: string): Promise<DiscordChannel> {
+    return this.call<DiscordChannel>("PATCH", `/channels/${threadId}`, { archived: true });
+  }
+
   // Edit the original (deferred) interaction response. Authenticated by the
   // interaction token in the URL — valid for 15 minutes after the interaction.
   editOriginalResponse(interactionToken: string, payload: unknown): Promise<unknown> {

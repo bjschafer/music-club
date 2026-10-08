@@ -146,14 +146,18 @@ async function handleCommand(c: AppContext, interaction: DiscordInteraction) {
         interaction.guild_id,
         user.id,
       );
-      if (!member)
+      if (member) {
+        member = await refreshMemberName(c.env.DB, member, interaction);
+      } else if (name === "pick" || !isAdmin(interaction, club)) {
+        // Admins can pass/wrap/extend on others' behalf without being in the
+        // rotation themselves; everyone else (and every /pick) needs a slot.
         return reply(
           c,
           "You're not in the rotation yet — use `/join` to join.",
           true,
         );
-      member = await refreshMemberName(c.env.DB, member, interaction);
-      if (name === "pick") return handlePick(c, interaction, club, member);
+      }
+      if (name === "pick") return handlePick(c, interaction, club, member!);
       if (name === "pass") return handlePass(c, interaction, club, member);
       if (name === "extend") return handleExtend(c, interaction, club, member);
       return handleWrap(c, interaction, club, member);
@@ -394,10 +398,21 @@ async function handlePass(
   c: AppContext,
   interaction: DiscordInteraction,
   club: Club,
-  member: Member,
+  member: Member | null,
 ) {
-  if (member.id !== club.current_dj_id) {
+  // An admin passing out of turn passes for whoever's on deck — e.g. a DJ who's
+  // gone quiet or bowed out.
+  const onBehalf = member?.id !== club.current_dj_id;
+  if (onBehalf && !isAdmin(interaction, club)) {
     return reply(c, "You can only pass when it's your turn.", true);
+  }
+  const dj = onBehalf
+    ? club.current_dj_id
+      ? await getMemberById(c.env.DB, club.current_dj_id)
+      : null
+    : member;
+  if (!dj) {
+    return reply(c, "Nobody's on deck — nothing to pass.", true);
   }
   const active = await getActiveRound(c.env.DB, interaction.guild_id!);
   if (active) {
@@ -408,14 +423,17 @@ async function handlePass(
     );
   }
 
-  await incrementPasses(c.env.DB, member.id);
-  const next = await advanceRotation(c.env.DB, interaction.guild_id!, member);
+  await incrementPasses(c.env.DB, dj.id);
+  const next = await advanceRotation(c.env.DB, interaction.guild_id!, dj);
 
+  const who = onBehalf
+    ? `An admin passed for **${dj.display_name}**`
+    : `**${dj.display_name}** passed`;
   return reply(
     c,
-    next.id === member.id
-      ? `⏭️ **${member.display_name}** passed — but you're the only DJ, so you're still on deck.`
-      : `⏭️ **${member.display_name}** passed. <@${next.discord_id}> is on deck.`,
+    next.id === dj.id
+      ? `⏭️ ${who} — but they're the only DJ, so they're still on deck.`
+      : `⏭️ ${who}. <@${next.discord_id}> is on deck.`,
   );
 }
 
@@ -451,13 +469,13 @@ async function handleExtend(
   c: AppContext,
   interaction: DiscordInteraction,
   club: Club,
-  member: Member,
+  member: Member | null,
 ) {
   const round = await getActiveRound(c.env.DB, interaction.guild_id!);
   if (!round) {
     return reply(c, "Nothing's playing right now — nothing to extend.", true);
   }
-  if (!(member.id === round.dj_id || isAdmin(interaction, club))) {
+  if (!(member?.id === round.dj_id || isAdmin(interaction, club))) {
     return reply(
       c,
       "Only the DJ who picked this (or an admin) can extend the listening window.",
@@ -482,14 +500,14 @@ async function handleWrap(
   c: AppContext,
   interaction: DiscordInteraction,
   club: Club,
-  member: Member,
+  member: Member | null,
 ) {
   const guildId = interaction.guild_id!;
   const round = await getActiveRound(c.env.DB, guildId);
   if (!round) {
     return reply(c, "Nothing to wrap — no pick is active.", true);
   }
-  if (!(member.id === round.dj_id || isAdmin(interaction, club))) {
+  if (!(member?.id === round.dj_id || isAdmin(interaction, club))) {
     return reply(
       c,
       "Only the DJ who picked this (or an admin) can wrap it.",
@@ -554,7 +572,50 @@ function handleClub(
   if (sub?.name === "reset") {
     return handleClubReset(c, interaction, club, sub);
   }
+  if (sub?.name === "kick") {
+    return handleClubKick(c, interaction, club, sub);
+  }
   return reply(c, "Unknown subcommand.", true);
+}
+
+// Admin-side /leave: drop someone else from the rotation. Soft-delete like
+// /leave, so they can come back later with /join.
+async function handleClubKick(
+  c: AppContext,
+  interaction: DiscordInteraction,
+  club: Club,
+  sub: DiscordInteractionOption,
+) {
+  if (!isAdmin(interaction, club)) {
+    return reply(
+      c,
+      "You need **Manage Server** (or the admin role) to remove members.",
+      true,
+    );
+  }
+
+  const guildId = interaction.guild_id!;
+  const userId = String(sub.options?.find((o) => o.name === "user")?.value);
+  const member = await getMemberByDiscordId(c.env.DB, guildId, userId);
+  if (!member) {
+    return reply(c, `<@${userId}> isn't in the rotation.`, true);
+  }
+  // Same guard as /leave: the cron relies on a listening round's picker still
+  // being on deck, so they can't drop out mid-pick.
+  const active = await getActiveRound(c.env.DB, guildId);
+  if (active?.dj_id === member.id) {
+    return reply(
+      c,
+      `**${member.display_name}** has an active pick — **${active.title}**. \`/wrap\` it first, then remove them.`,
+      true,
+    );
+  }
+
+  const next = await leaveRotation(c.env.DB, guildId, member);
+  const msg = next
+    ? `👋 **${member.display_name}** was removed from the rotation. <@${next.discord_id}> is now on deck.`
+    : `👋 **${member.display_name}** was removed from the rotation.`;
+  return reply(c, msg);
 }
 
 async function handleClubReset(

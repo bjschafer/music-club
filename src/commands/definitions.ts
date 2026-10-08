@@ -73,7 +73,7 @@ export const commands = [
   },
   {
     name: "pass",
-    description: "Pass your turn as DJ — the rotation moves on",
+    description: "Pass your turn as DJ (admins: pass for whoever's on deck)",
     type: 1,
   },
   {
@@ -107,6 +107,19 @@ export const commands = [
             description: "Set to True to actually delete everything",
             type: 5, // BOOLEAN
             required: false,
+          },
+        ],
+      },
+      {
+        name: "kick",
+        description: "Remove a member from the DJ rotation",
+        type: 1, // SUB_COMMAND
+        options: [
+          {
+            name: "user",
+            description: "Member to remove",
+            type: 6, // USER
+            required: true,
           },
         ],
       },

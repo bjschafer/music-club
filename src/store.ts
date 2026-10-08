@@ -415,3 +415,18 @@ export async function resetClub(db: D1Database, guildId: string): Promise<void> 
     db.prepare("DELETE FROM clubs WHERE guild_id = ?").bind(guildId),
   ]);
 }
+
+export async function getMeta(db: D1Database, key: string): Promise<string | null> {
+  const row = await db
+    .prepare("SELECT value FROM meta WHERE key = ?")
+    .bind(key)
+    .first<{ value: string }>();
+  return row?.value ?? null;
+}
+
+export async function setMeta(db: D1Database, key: string, value: string): Promise<void> {
+  await db
+    .prepare("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value")
+    .bind(key, value)
+    .run();
+}

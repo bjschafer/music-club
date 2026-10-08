@@ -11,6 +11,7 @@ import {
   type DiscordInteractionOption,
 } from "./discord/types";
 import { DiscordRest, sleep } from "./discord/rest";
+import { syncCommands } from "./commands/sync";
 import {
   touchClub,
   getMemberByDiscordId,
@@ -45,6 +46,8 @@ export interface Env {
   DISCORD_PUBLIC_KEY: string;
   DISCORD_BOT_TOKEN: string;
   DISCORD_APP_ID: string;
+  // Local dev only: sync slash commands to this guild instead of globally.
+  DISCORD_DEV_GUILD_ID?: string;
 }
 
 type AppContext = Context<{ Bindings: Env }>;
@@ -79,6 +82,9 @@ app.post("/interactions", async (c) => {
   }
 
   if (interaction.type === InteractionType.APPLICATION_COMMAND) {
+    // Re-register slash commands if definitions changed since the last sync.
+    // Background + best effort — never holds up or fails the interaction.
+    c.executionCtx.waitUntil(syncCommandsSafely(c.env));
     return handleCommand(c, interaction);
   }
 
@@ -775,10 +781,19 @@ async function postSearchLinks(
   });
 }
 
+function syncCommandsSafely(env: Env): Promise<void> {
+  const rest = new DiscordRest(env.DISCORD_BOT_TOKEN, env.DISCORD_APP_ID);
+  return syncCommands(env.DB, rest, env.DISCORD_DEV_GUILD_ID).catch((err) =>
+    console.warn("Slash command sync failed", err),
+  );
+}
+
 // Cron handler: nudge listening windows that are nearly up, once each.
 async function handleScheduled(_event: ScheduledController, env: Env) {
   const now = Math.floor(Date.now() / 1000);
   const rest = new DiscordRest(env.DISCORD_BOT_TOKEN, env.DISCORD_APP_ID);
+  // Also sync here, so changed commands land even if nobody uses the bot.
+  await syncCommandsSafely(env);
 
   // Auto-wrap rounds whose listening window has fully elapsed: archive the round
   // and advance the rotation, exactly as a manual /wrap would. Done before the

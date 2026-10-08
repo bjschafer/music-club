@@ -102,6 +102,14 @@ export class DiscordRest {
     return this.call<DiscordChannel>("PATCH", `/channels/${threadId}`, { archived: true });
   }
 
+  // Bulk-overwrite the app's slash commands — globally, or for one guild.
+  overwriteCommands(commands: unknown[], guildId?: string): Promise<unknown> {
+    const path = guildId
+      ? `/applications/${this.appId}/guilds/${guildId}/commands`
+      : `/applications/${this.appId}/commands`;
+    return this.call("PUT", path, commands);
+  }
+
   // Edit the original (deferred) interaction response. Authenticated by the
   // interaction token in the URL — valid for 15 minutes after the interaction.
   editOriginalResponse(interactionToken: string, payload: unknown): Promise<unknown> {

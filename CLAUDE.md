@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```sh
 bun run dev              # local Worker at http://localhost:8787
 bun run deploy           # deploy to Cloudflare manually (skip if pushing to main)
-bun run register         # register/update slash commands with Discord
+bun run register         # manually register slash commands (normally automatic, see below)
 bun run typecheck        # tsc --noEmit (no build output, just type errors)
 
 bun run db:migrate:local   # apply new migrations to local D1
@@ -16,7 +16,7 @@ bun run db:migrate:remote  # apply new migrations to production D1
 
 **Deploys are automatic** — pushing to `main` triggers a Cloudflare Workers build and deploy via the GitHub integration. `bun run deploy` is available for manual/out-of-band deploys only.
 
-**After changing slash command definitions** (`src/commands/definitions.ts`), always run `bun run register`.
+**Slash commands sync themselves.** After a deploy, the first interaction (or the daily cron) hashes `src/commands/definitions.ts`, compares it to the hash stored in D1's `meta` table, and bulk-overwrites Discord's global commands if it changed (`src/commands/sync.ts`). Global commands can take up to ~1 hour to show up in clients. `bun run register` is only needed for out-of-band registration. Under `wrangler dev` with `DISCORD_DEV_GUILD_ID` set in `.dev.vars`, the sync targets that guild instead of overwriting the global set.
 
 ## Architecture
 
@@ -39,6 +39,7 @@ This is a **multi-tenant Discord bot** deployed as a Cloudflare Worker. Each Dis
 | `src/discord/rest.ts` | Minimal Discord REST client (post message, create thread, edit deferred response) |
 | `src/discord/types.ts` | Interaction/response type constants, helper functions (`interactionUser`, `getOption`, etc.) |
 | `src/commands/definitions.ts` | Slash command schemas registered with Discord |
+| `src/commands/sync.ts` | Auto-registers commands with Discord when the definitions hash changes |
 | `src/commands/register.ts` | One-off script that calls Discord's API to register commands |
 | `migrations/` | D1 SQL migrations applied in order |
 
@@ -97,7 +98,7 @@ Secrets are **not** in `wrangler.jsonc`. Locally: `.dev.vars`. Production: `wran
 | `DISCORD_PUBLIC_KEY` | Ed25519 public key for request verification |
 | `DISCORD_BOT_TOKEN` | Bot token for REST API calls |
 | `DISCORD_APP_ID` | Application ID for editing deferred responses |
-| `DISCORD_DEV_GUILD_ID` | (optional, local only) Guild for instant command registration |
+| `DISCORD_DEV_GUILD_ID` | (optional, local only) Guild for instant command registration/sync |
 
 ### Local dev notes
 
@@ -109,6 +110,6 @@ Then set the Discord app's **Interactions Endpoint URL** to `https://<tunnel>/in
 
 ### Cron
 
-`wrangler.jsonc` schedules `handleScheduled` daily at 17:00 UTC. Each run, across all guilds:
+`wrangler.jsonc` schedules `handleScheduled` daily at 17:00 UTC. Each run first syncs slash commands (see above), then, across all guilds:
 1. **Auto-wrap** listening rounds whose `listen_by` has fully elapsed — archives the round, advances the rotation, and posts an "auto-wrapped, next DJ on deck" message to the announce channel (falling back to the thread).
 2. **Remind** on listening rounds whose window ends within the next 24 hours (but hasn't elapsed yet) by posting a nudge to the discussion thread, then sets `reminded_at` so it doesn't fire again.

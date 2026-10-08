@@ -9,12 +9,13 @@
 //           up to ~1 hour).
 
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { commands } from "./definitions.js";
 
 // Load .dev.vars (KEY=value lines) into process.env if not already set.
 function loadDevVars(): void {
   try {
-    const text = readFileSync(new URL("../../.dev.vars", import.meta.url), "utf8");
+    const text = readFileSync(join(import.meta.dirname, "../../.dev.vars"), "utf8");
     for (const line of text.split("\n")) {
       const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
       if (match && !process.env[match[1]]) {

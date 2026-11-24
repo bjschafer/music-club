@@ -13,7 +13,7 @@
     "db:migrate:remote": "wrangler d1 migrations apply music-club --remote"
   },
   "dependencies": {
-    "hono": "^4.13.18"
+    "hono": "^4.13.19"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261114.1",
